@@ -3,7 +3,7 @@ Simple IHM for redteam engagement.
 
 ## Features
 
-- ✅ Upload de fichiers `masscan` au format XML
+- ✅ Upload de fichiers `masscan`/`nmap` au format XML
 - 📊 Tableau de bord avec :
   - IPs scannées
   - Ports ouverts (Top 10)
