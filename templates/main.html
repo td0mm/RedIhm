@@ -5,15 +5,19 @@
   <link rel="stylesheet" href="{{ bootstrap_css }}">
   <script>
     function toggleAll(open) {
-      const acc = document.querySelectorAll('.accordion-collapse');
-      acc.forEach(el => el.classList.toggle('show', open));
+      document.querySelectorAll('.accordion-collapse')
+              .forEach(el => el.classList.toggle('show', open));
     }
   </script>
 </head>
 <body class="container py-4">
-  <h1 class="mb-4">RedTeam Dashboard</h1>
 
-  <!-- Upload Section -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="m-0">RedTeam Dashboard</h1>
+    <a href="{{ url_for('timeline') }}" class="btn btn-outline-primary">📜 Voir la timeline</a>
+  </div>
+
+  <!-- Upload section -->
   <h3>Uploader un fichier Masscan</h3>
   <form method="post" enctype="multipart/form-data" class="mb-4">
     <div class="input-group">
@@ -22,149 +26,147 @@
     </div>
   </form>
 
-  <!-- Search Filters -->
-  <h3>Filtres</h3>
-  <form method="get" class="row g-2 mb-4">
-    <div class="col-md-3">
-      <input type="text" name="search" value="{{ search }}" placeholder="Recherche IP/notes..." class="form-control">
+  <!-- Filtres -->
+  <form method="get" class="row g-3 mb-4">
+    <div class="col-md-4">
+      <input type="text" name="search" value="{{ search }}" class="form-control" placeholder="Rechercher IP ou notes">
     </div>
     <div class="col-md-3">
-      <input type="text" name="tag" value="{{ tag_filter }}" placeholder="Filtrer par tag" class="form-control">
+      <input type="text" name="tag" value="{{ tag_filter }}" class="form-control" placeholder="Filtrer par tag">
     </div>
     <div class="col-md-3">
       <select name="priority" class="form-select">
-        <option value="">Filtrer par priorité</option>
-        <option value="Élevée" {% if priority_filter == 'Élevée' %}selected{% endif %}>🔴 Élevée</option>
-        <option value="Moyenne" {% if priority_filter == 'Moyenne' %}selected{% endif %}>🟠 Moyenne</option>
-        <option value="Faible" {% if priority_filter == 'Faible' %}selected{% endif %}>🟡 Faible</option>
+        <option value="">Toutes priorités</option>
+        <option value="faible" {% if priority_filter == 'faible' %}selected{% endif %}>Faible</option>
+        <option value="moyenne" {% if priority_filter == 'moyenne' %}selected{% endif %}>Moyenne</option>
+        <option value="élevée" {% if priority_filter == 'élevée' %}selected{% endif %}>Élevée</option>
       </select>
     </div>
-    <div class="col-md-3">
-      <button type="submit" class="btn btn-outline-secondary w-100">Rechercher</button>
+    <div class="col-md-2">
+      <button class="btn btn-outline-secondary w-100">Filtrer</button>
     </div>
   </form>
 
-  <!-- Dashboard Stats -->
-  <div class="row mb-4">
-    <div class="col-md-4">
-      <h4>Tags</h4>
-      <ul class="list-group">
-        {% for tag, count in tags_summary.items() %}
-          <li class="list-group-item d-flex justify-content-between">
-            {{ tag }}
-            <span class="badge bg-info">{{ count }}</span>
-          </li>
-        {% endfor %}
-      </ul>
-    </div>
-    <div class="col-md-4">
-      <h4>Top 10 ports ouverts</h4>
-      <ul class="list-group">
-        {% for port, count in port_stats.items() %}
-          <li class="list-group-item d-flex justify-content-between">
-            Port {{ port }}
-            <span class="badge bg-dark">{{ count }}</span>
-          </li>
-        {% endfor %}
-      </ul>
-    </div>
-    <div class="col-md-4">
-      <h4>Priorités</h4>
-      <ul class="list-group">
-        {% for level in ['Élevée', 'Moyenne', 'Faible'] %}
-          {% set badge_class = {
-            'Élevée': 'bg-danger',
-            'Moyenne': 'bg-warning text-dark',
-            'Faible': 'bg-light text-dark border'
-          }[level] %}
-          <li class="list-group-item d-flex justify-content-between align-items-center">
-            {{ level }}
-            <span class="badge {{ badge_class }}">{{ priority_counts.get(level, 0) }}</span>
-          </li>
-        {% endfor %}
-      </ul>
-    </div>
-  </div>
+<!-- Stats -->
+<h4>📊 Statistiques</h4>
+<ul>
+  <li><strong>Total hôtes :</strong> {{ hosts|length }}</li>
+  <li><strong>Total de ports ouverts :</strong> {{ total_ports }}</li>
+  <li><strong>Par priorité :</strong>
+    {% for level, count in priority_counts.items() %}
+      <span class="badge
+        {% if level == 'élevée' %}bg-danger
+        {% elif level == 'moyenne' %}bg-warning text-dark
+        {% else %}bg-secondary{% endif %} me-2">
+        {{ level }}: {{ count }}
+      </span>
+    {% endfor %}
+  </li>
+  <li><strong>Top 10 ports ouverts :</strong>
+    {% for port, count in port_stats.items() %}
+      <span class="badge bg-primary me-1">{{ port }} ({{ count }})</span>
+    {% endfor %}
+  </li>
+</ul>
 
-  <!-- Hosts List -->
-  <div class="d-flex justify-content-between align-items-center mb-2">
-    <h3>Hôtes détectés ({{ hosts | length }})</h3>
-    <div>
-      <button class="btn btn-outline-success me-2" onclick="toggleAll(true)">Tout ouvrir</button>
-      <button class="btn btn-outline-danger" onclick="toggleAll(false)">Tout fermer</button>
-    </div>
+  <!-- Accordéon -->
+  <div class="d-flex justify-content-end mb-2">
+    <button onclick="toggleAll(true)" class="btn btn-sm btn-outline-success me-2">Tout ouvrir</button>
+    <button onclick="toggleAll(false)" class="btn btn-sm btn-outline-danger">Tout fermer</button>
   </div>
 
   <div class="accordion" id="hostAccordion">
     {% for host in hosts %}
-    <div class="accordion-item mb-2">
-      <h2 class="accordion-header" id="heading{{ loop.index }}">
-        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}">
-          {{ host[0] }} —
-          <span class="ms-2 badge bg-secondary">{{ host[1] or 'aucun tag' }}</span>
-          {% if host[4] %}
-            {% set prio_class = {
-              'Élevée': 'bg-danger',
-              'Moyenne': 'bg-warning text-dark',
-              'Faible': 'bg-light text-dark border'
-            }[host[4]] %}
-            <span class="ms-2 badge {{ prio_class }}">Priorité: {{ host[4] }}</span>
-          {% endif %}
-        </button>
-      </h2>
-      <div id="collapse{{ loop.index }}" class="accordion-collapse collapse" data-bs-parent="#hostAccordion">
-        <div class="accordion-body">
-          <form method="post" class="mb-3">
-            <input type="hidden" name="ip" value="{{ host[0] }}">
-            <div class="mb-2">
-              <label>Tags</label>
-              <input type="text" name="tags" class="form-control" value="{{ host[1] }}">
-            </div>
-            <div class="mb-2">
-              <label>Priorité</label>
-              <select name="priority" class="form-select">
-                <option value="">Aucune</option>
-                <option value="Faible" {% if host[4]=='Faible' %}selected{% endif %}>Faible</option>
-                <option value="Moyenne" {% if host[4]=='Moyenne' %}selected{% endif %}>Moyenne</option>
-                <option value="Élevée" {% if host[4]=='Élevée' %}selected{% endif %}>Élevée</option>
-              </select>
-            </div>
-            <div class="mb-2">
-              <label>Checklist</label>
-              <textarea name="checklist" class="form-control" rows="2">{{ host[2] }}</textarea>
-            </div>
-            <div class="mb-2">
-              <label>Notes</label>
-              <textarea name="notes" class="form-control" rows="3">{{ host[3] }}</textarea>
-            </div>
-            <div class="mb-2">
-              <label>Nouvelle action (timeline)</label>
-              <input type="text" name="action" class="form-control" placeholder="ex: dump lsass, lateral move...">
-            </div>
-            <button type="submit" class="btn btn-sm btn-success">Sauvegarder</button>
-          </form>
+      <div class="accordion-item">
+        <h2 class="accordion-header">
+          <button class="accordion-button collapsed" data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}">
+            {{ host[0] }} — 
+            {% if host[4] == 'élevée' %}
+              <span class="badge bg-danger">Priorité élevée</span>
+            {% elif host[4] == 'moyenne' %}
+              <span class="badge bg-warning text-dark">Priorité moyenne</span>
+            {% elif host[4] == 'faible' %}
+              <span class="badge bg-secondary">Priorité faible</span>
+            {% endif %}
+          </button>
+        </h2>
+        <div id="collapse{{ loop.index }}" class="accordion-collapse collapse">
+          <div class="accordion-body">
+            <form method="post">
+              <input type="hidden" name="ip" value="{{ host[0] }}">
+              <div class="mb-2">
+                <label>Tags (séparés par virgule)</label>
+                <input type="text" name="tags" value="{{ host[1] }}" class="form-control">
+              </div>
+              <div class="mb-2">
+                <label>Checklist</label>
+                <textarea name="checklist" class="form-control">{{ host[2] }}</textarea>
+              </div>
+              <div class="mb-2">
+                <label>Notes</label>
+                <textarea name="notes" class="form-control">{{ host[3] }}</textarea>
+              </div>
+              <div class="mb-2">
+                <label>Priorité</label>
+                <select name="priority" class="form-select">
+                  <option value="">Non défini</option>
+                  <option value="faible" {% if host[4] == 'faible' %}selected{% endif %}>Faible</option>
+                  <option value="moyenne" {% if host[4] == 'moyenne' %}selected{% endif %}>Moyenne</option>
+                  <option value="élevée" {% if host[4] == 'élevée' %}selected{% endif %}>Élevée</option>
+                </select>
+              </div>
+              <div class="mb-2">
+                <label>Nouvelle action</label>
+                <input type="text" name="action" class="form-control" placeholder="ex : dump lsass, persistence…">
+              </div>
+              <div class="mb-3">
+                <label>Type d'action</label>
+                <select name="action_type" class="form-select">
+                  <option value="info">ℹ️ Info</option>
+                  <option value="access:host">🔥 Accès machine</option>
+                  <option value="access:account">🔑 Accès compte</option>
+                  <option value="persistence">🛠 Persistance</option>
+                  <option value="move:lateral">➡️ Mouvement latéral</option>
+                  <option value="exfiltration">📦 Exfiltration</option>
+                </select>
+              </div>
+              <button type="submit" class="btn btn-sm btn-success">Sauvegarder</button>
+            </form>
 
-          <h5>Ports ouverts</h5>
-          <ul class="list-group mb-3">
-            {% for port, proto in ports_data[host[0]] %}
-              <li class="list-group-item">{{ proto }}/{{ port }}</li>
-            {% endfor %}
-          </ul>
+            <hr>
 
-          {% if actions_data[host[0]] %}
-          <h5>Timeline des actions</h5>
-          <ul class="list-group">
-            {% for timestamp, action in actions_data[host[0]] %}
-              <li class="list-group-item d-flex justify-content-between">
-                <span>{{ action }}</span>
-                <small class="text-muted">{{ timestamp }}</small>
-              </li>
-            {% endfor %}
-          </ul>
-          {% endif %}
+            <h5>Ports ouverts</h5>
+            <ul class="list-group mb-3">
+              {% for port, proto in ports_data[host[0]] %}
+                <li class="list-group-item">{{ proto }}/{{ port }}</li>
+              {% endfor %}
+            </ul>
+
+            {% if actions_data[host[0]] %}
+              <h5>Timeline des actions</h5>
+              {% set color_map = {
+                'info': 'bg-primary',
+                'access:host': 'bg-danger',
+                'access:account': 'bg-danger',
+                'persistence': 'bg-warning text-dark',
+                'move:lateral': 'bg-secondary',
+                'exfiltration': 'bg-dark'
+              } %}
+              <ul class="list-group">
+                {% for ts, action, typ in actions_data[host[0]] %}
+                  <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>
+                      <span class="badge {{ color_map.get(typ, 'bg-info') }} me-2">{{ typ }}</span>
+                      {{ action }}
+                    </span>
+                    <small class="text-muted">{{ ts }}</small>
+                  </li>
+                {% endfor %}
+              </ul>
+            {% endif %}
+          </div>
         </div>
       </div>
-    </div>
     {% endfor %}
   </div>
 
