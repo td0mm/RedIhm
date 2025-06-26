@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Timeline globale</title>
+  <link rel="stylesheet" href="{{ bootstrap_css }}">
+  <style>
+    .timeline {position:relative;margin:2rem 0;padding-left:40px;border-left:3px solid #0d6efd}
+    .item {position:relative;margin-bottom:1.5rem}
+    .item::before{content:'';position:absolute;left:-10px;top:0;width:16px;height:16px;border:2px solid #fff;border-radius:50%}
+    .badge-info{background:#0d6efd}
+    .badge-danger{background:#dc3545}
+    .badge-warning{background:#ffc107;color:#212529}
+    .badge-secondary{background:#6c757d}
+    .badge-dark{background:#212529}
+    .date{font-size:.8rem;color:#666}
+    .content{margin-left:10px}
+  </style>
+</head>
+<body class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="m-0">📜 Timeline globale</h1>
+    <a href="{{ url_for('main') }}" class="btn btn-secondary">← Retour</a>
+  </div>
+
+  {% if rows %}
+    {% set badge = {
+        'info':'badge-info',
+        'access:host':'badge-danger',
+        'access:account':'badge-danger',
+        'persistence':'badge-warning',
+        'move:lateral':'badge-secondary',
+        'exfiltration':'badge-dark'
+    } %}
+    <div class="timeline">
+      {% for ts, ip, typ, txt in rows %}
+        <div class="item">
+          <span class="date">{{ ts }}</span>
+          <div class="content">
+            <span class="badge {{ badge.get(typ,'badge-info') }}">{{ typ }}</span>
+            <strong>{{ ip }}</strong> — {{ txt }}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="alert alert-info">Aucune action enregistrée.</div>
+  {% endif %}
+</body>
+</html>
