@@ -1,49 +1,133 @@
 <!DOCTYPE html>
-<html>
+<html lang="fr">
 <head>
-  <title>Timeline globale</title>
-  <link rel="stylesheet" href="{{ bootstrap_css }}">
-  <style>
-    .timeline {position:relative;margin:2rem 0;padding-left:40px;border-left:3px solid #0d6efd}
-    .item {position:relative;margin-bottom:1.5rem}
-    .item::before{content:'';position:absolute;left:-10px;top:0;width:16px;height:16px;border:2px solid #fff;border-radius:50%}
-    .badge-info{background:#0d6efd}
-    .badge-danger{background:#dc3545}
-    .badge-warning{background:#ffc107;color:#212529}
-    .badge-secondary{background:#6c757d}
-    .badge-dark{background:#212529}
-    .date{font-size:.8rem;color:#666}
-    .content{margin-left:10px}
-  </style>
+    <meta charset="UTF-8">
+    <title>Timeline des actions RedTeam</title>
+    <link rel="stylesheet" href="{{ bootstrap_css }}">
+    <style>
+        .timeline {
+            position: relative;
+            margin: 2em 0;
+            padding-left: 40px;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 20px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #ccc;
+        }
+        .timeline-entry {
+            position: relative;
+            margin-bottom: 1.5em;
+        }
+        .timeline-entry::before {
+            content: '';
+            position: absolute;
+            left: -22px;
+            top: 0.5em;
+            width: 10px;
+            height: 10px;
+            background: #0d6efd;
+            border-radius: 50%;
+        }
+    </style>
 </head>
-<body class="container py-4">
-  <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="m-0">📜 Timeline globale</h1>
-    <a href="{{ url_for('main') }}" class="btn btn-secondary">← Retour</a>
-  </div>
+<body class="container my-4">
 
-  {% if rows %}
-    {% set badge = {
-        'info':'badge-info',
-        'access:host':'badge-danger',
-        'access:account':'badge-danger',
-        'persistence':'badge-warning',
-        'move:lateral':'badge-secondary',
-        'exfiltration':'badge-dark'
-    } %}
-    <div class="timeline">
-      {% for ts, ip, typ, txt in rows %}
-        <div class="item">
-          <span class="date">{{ ts }}</span>
-          <div class="content">
-            <span class="badge {{ badge.get(typ,'badge-info') }}">{{ typ }}</span>
-            <strong>{{ ip }}</strong> — {{ txt }}
-          </div>
+    <h2 class="mb-4">🕒 Timeline des actions RedTeam</h2>
+
+    <form method="POST" class="mb-4 border p-3 rounded bg-light">
+        <div class="row g-2">
+            <div class="col-md-2">
+                <input name="ip" class="form-control" placeholder="IP" required>
+            </div>
+            <div class="col-md-4">
+                <input name="action" class="form-control" placeholder="Action" required>
+            </div>
+            <div class="col-md-3">
+                <select name="type" class="form-select">
+                    <option value="info">Info</option>
+                    <option value="access:host">Accès Machine</option>
+                    <option value="access:account">Accès Compte</option>
+                    <option value="persistence">Persistence</option>
+                    <option value="exfiltration">Exfiltration</option>
+                    <option value="move:lateral">Mouvement Latéral</option>
+                    <option value="cleanup">Nettoyage</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select name="status" class="form-select">
+                    <option value="">-</option>
+                    <option value="success">✅ Succès</option>
+                    <option value="fail">❌ Échec</option>
+                    <option value="detected">⚠️ Détecté</option>
+                </select>
+            </div>
+            <div class="col-md-1">
+                <button class="btn btn-primary w-100">Ajouter</button>
+            </div>
         </div>
-      {% endfor %}
+    </form>
+
+    <div class="timeline">
+        {% for id, ts, ip, typ, status, text in rows %}
+            <div class="timeline-entry">
+                <div>
+                    {% if typ == 'access:host' %}
+                        💀 <strong>Accès Machine</strong> sur <code>{{ ip }}</code>
+                    {% elif typ == 'access:account' %}
+                        👤 <strong>Accès Compte</strong> sur <code>{{ ip }}</code>
+                    {% elif typ == 'persistence' %}
+                        📌 <strong>Persistence</strong> sur <code>{{ ip }}</code>
+                    {% elif typ == 'exfiltration' %}
+                        📤 <strong>Exfiltration</strong> sur <code>{{ ip }}</code>
+                    {% elif typ == 'move:lateral' %}
+                        🔀 <strong>Latéral</strong> depuis <code>{{ ip }}</code>
+                    {% elif typ == 'cleanup' %}
+                        🧹 <strong>Nettoyage</strong> sur <code>{{ ip }}</code>
+                    {% else %}
+                        ℹ️ <strong>Info</strong> pour <code>{{ ip }}</code>
+                    {% endif %}
+
+                    {% if status == 'success' %}
+                        <span class="badge bg-success ms-2">✅ Succès</span>
+                    {% elif status == 'fail' %}
+                        <span class="badge bg-danger ms-2">❌ Échec</span>
+                    {% elif status == 'detected' %}
+                        <span class="badge bg-warning text-dark ms-2">⚠️ Détecté</span>
+                    {% endif %}
+                </div>
+
+                <div class="text-muted small">{{ text }}</div>
+                <div class="text-muted small"><em>{{ ts }}</em></div>
+
+                <form method="POST" action="/action/{{ id }}" class="mt-1 row g-2">
+                    <div class="col-md-4">
+                        <input name="action" value="{{ text }}" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-2">
+                        <select name="status" class="form-select form-select-sm">
+                            <option value="" {% if not status %}selected{% endif %}>-</option>
+                            <option value="success" {% if status == 'success' %}selected{% endif %}>✅ Succès</option>
+                            <option value="fail" {% if status == 'fail' %}selected{% endif %}>❌ Échec</option>
+                            <option value="detected" {% if status == 'detected' %}selected{% endif %}>⚠️ Détecté</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <input type="datetime-local" name="timestamp"
+                               value="{{ ts.replace(' ', 'T') }}"
+                               class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-sm btn-outline-primary w-100">✏️ Modifier</button>
+                    </div>
+                </form>
+            </div>
+        {% endfor %}
     </div>
-  {% else %}
-    <div class="alert alert-info">Aucune action enregistrée.</div>
-  {% endif %}
+
 </body>
 </html>
