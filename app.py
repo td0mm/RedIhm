@@ -13,7 +13,6 @@ app.config.update(
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # ---------- DB SETUP ----------
-
 def init_db():
     with sqlite3.connect(app.config['DATABASE']) as c:
         cur = c.cursor()
@@ -27,18 +26,13 @@ def init_db():
 
         cur.execute('''CREATE TABLE IF NOT EXISTS actions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ip TEXT, timestamp TEXT, action TEXT, type TEXT DEFAULT 'info')''')
-
-        try:
-            cur.execute("ALTER TABLE actions ADD COLUMN type TEXT DEFAULT 'info'")
-        except sqlite3.OperationalError:
-            pass
+            ip TEXT, timestamp TEXT, action TEXT,
+            type TEXT DEFAULT 'info',
+            status TEXT DEFAULT '')''')
         c.commit()
-
 init_db()
 
 # ---------- HELPERS ----------
-
 def parse_masscan(xml_path):
     tree = ET.parse(xml_path)
     data = defaultdict(list)
@@ -47,7 +41,6 @@ def parse_masscan(xml_path):
         for p in host.find('ports').findall('port'):
             data[ip].append((int(p.attrib['portid']), p.attrib['protocol']))
     return data
-
 
 def insert_scan_results(results):
     with sqlite3.connect(app.config['DATABASE']) as c:
@@ -58,20 +51,19 @@ def insert_scan_results(results):
                 cur.execute("INSERT OR IGNORE INTO ports(ip,port,protocol) VALUES(?,?,?)", (ip, port, proto))
         c.commit()
 
-
-def log_action(ip, text, a_type='info', conn=None):
+def log_action(ip, text, a_type='info', status='', conn=None, skip_db=False):
     ts = datetime.now().isoformat(timespec='seconds')
-    if conn:
-        conn.execute("INSERT INTO actions(ip,timestamp,action,type) VALUES(?,?,?,?)", (ip, ts, text, a_type))
-    else:
-        with sqlite3.connect(app.config['DATABASE']) as c:
-            c.execute("INSERT INTO actions(ip,timestamp,action,type) VALUES(?,?,?,?)", (ip, ts, text, a_type))
-            c.commit()
+    if not skip_db:
+        if conn:
+            conn.execute("INSERT INTO actions(ip,timestamp,action,type,status) VALUES(?,?,?,?,?)", (ip, ts, text, a_type, status))
+        else:
+            with sqlite3.connect(app.config['DATABASE']) as c:
+                c.execute("INSERT INTO actions(ip,timestamp,action,type,status) VALUES(?,?,?,?,?)", (ip, ts, text, a_type, status))
+                c.commit()
     with open(app.config['LOGFILE'], 'a') as f:
-        f.write(f"[{ts}] {ip}|{a_type}|{text}\n")
+        f.write(f"[{ts}] {ip}|{a_type}|{status}|{text}\n")
 
 # ---------- ROUTES ----------
-
 @app.route('/', methods=['GET', 'POST'])
 def main():
     if request.method == 'POST':
@@ -81,7 +73,7 @@ def main():
                 path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(f.filename))
                 f.save(path)
                 insert_scan_results(parse_masscan(path))
-                log_action('SYSTEM', f'Fichier Masscan importé : {f.filename}')
+                log_action('SYSTEM', f'Fichier Masscan importé : {f.filename}', 'info')
                 return redirect(url_for('main'))
 
         ip = request.form.get('ip')
@@ -92,12 +84,11 @@ def main():
             prio = request.form.get('priority','')
             a_text = request.form.get('action','').strip()
             a_type = request.form.get('action_type','info')
+            a_status = request.form.get('action_status','')
             with sqlite3.connect(app.config['DATABASE']) as conn:
                 conn.execute("UPDATE hosts SET tags=?, checklist=?, notes=?, priority=? WHERE ip=?", (tags, checklist, notes, prio, ip))
                 if a_text:
-                    log_action(ip, a_text, a_type, conn)
-                else:
-                    log_action(ip, "Mise à jour des métadonnées", 'info', conn)
+                    log_action(ip, a_text, a_type, a_status, conn)
                 conn.commit()
             return redirect(url_for('main'))
 
@@ -107,7 +98,6 @@ def main():
 
     with sqlite3.connect(app.config['DATABASE']) as c:
         cur = c.cursor()
-        #--- hosts filtrés pour affichage ---
         q, params, cond = "SELECT * FROM hosts", [], []
         if search:
             cond.append("(ip LIKE ? OR notes LIKE ?)"); params += [f'%{search}%']*2
@@ -120,22 +110,17 @@ def main():
         cur.execute(q, params)
         hosts = cur.fetchall()
 
-        #--- ports & actions pour hôtes affichés ---
         ports_data = defaultdict(list)
         for ip, port, proto in cur.execute("SELECT ip,port,protocol FROM ports"):
             ports_data[ip].append((port,proto))
 
         actions_data = defaultdict(list)
-        for ip, ts, txt, typ in cur.execute("SELECT ip,timestamp,action,type FROM actions ORDER BY timestamp ASC"):
-            actions_data[ip].append((ts, txt, typ))
+        for ip, ts, txt, typ, stat in cur.execute("SELECT ip,timestamp,action,type,status FROM actions ORDER BY timestamp ASC"):
+            actions_data[ip].append((ts, txt, typ, stat))
 
-        #--- GLOBAL stats (toute la BDD) ---
         global_port_stats = {port:cnt for port,cnt in cur.execute("SELECT port, COUNT(DISTINCT ip) FROM ports GROUP BY port ORDER BY COUNT(DISTINCT ip) DESC LIMIT 10")}
-
         global_total_ports = cur.execute("SELECT COUNT(*) FROM ports").fetchone()[0]
-
         global_priority_counts = {prio:cnt for prio,cnt in cur.execute("SELECT priority, COUNT(*) FROM hosts WHERE priority != '' GROUP BY priority")}
-
         global_tag_summary = defaultdict(int)
         for (tag_str,) in cur.execute("SELECT tags FROM hosts WHERE tags != ''"):
             for t in tag_str.split(','):
@@ -151,11 +136,34 @@ def main():
         tags_summary=global_tag_summary,
         search=search, tag_filter=tag_f, priority_filter=prio_f)
 
-@app.route('/timeline')
+@app.route('/timeline', methods=['GET', 'POST'])
 def timeline():
+    if request.method == 'POST':
+        ip = request.form.get('ip')
+        txt = request.form.get('action')
+        typ = request.form.get('type')
+        stat = request.form.get('status')
+        if ip and txt:
+            log_action(ip, txt, typ, stat)
+        return redirect(url_for('timeline'))
+
     with sqlite3.connect(app.config['DATABASE']) as c:
-        rows = c.execute("SELECT timestamp,ip,type,action FROM actions ORDER BY timestamp ASC").fetchall()
+        rows = c.execute("SELECT id, timestamp, ip, type, status, action FROM actions WHERE type != 'info' ORDER BY timestamp ASC").fetchall()
     return render_template('timeline.html', rows=rows)
+
+@app.route('/action/<int:action_id>', methods=['POST'])
+def edit_action(action_id):
+    text = request.form.get('action')
+    stat = request.form.get('status')
+    timestamp = request.form.get('timestamp')
+
+    with sqlite3.connect(app.config['DATABASE']) as c:
+        if timestamp:
+            c.execute("UPDATE actions SET action=?, status=?, timestamp=? WHERE id=?", (text, stat, timestamp, action_id))
+        else:
+            c.execute("UPDATE actions SET action=?, status=? WHERE id=?", (text, stat, action_id))
+        c.commit()
+    return redirect(url_for('timeline'))
 
 @app.context_processor
 def inject_bootstrap():
